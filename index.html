@@ -300,14 +300,14 @@
                 <div class="form-group">
                     <label>Book Title & Author</label>
                     <input type="text" id="new-book-title" placeholder="e.g. Atomic Habits - James Clear">
-                </div >
+                </div>
                 <button class="btn btn-add" onclick="addNewBook()">Add to Library</button>
-            </div >
-        </div >
+            </div>
+        </div>
         
         <h2>📚 Book Catalogue</h2>
         <div class="catalogue-grid" id="catalogue-grid"></div>
-    </div >
+    </div>
 
     <div id="tracker" class="page">
         <div class="card-section">
@@ -317,22 +317,22 @@
                     <label>Borrower Name (Type or Select)</label>
                     <input type="text" id="borrower-input" list="member-suggestions" placeholder="Start typing name...">
                     <datalist id="member-suggestions"></datalist>
-                </div >
+                </div>
                 <div class="form-group">
                     <label>Book</label>
                     <select id="book-select"></select>
-                </div >
+                </div>
                 <div class="form-group">
                     <label>Date Taken</label>
                     <input type="date" id="date-taken">
-                </div >
+                </div>
                 <div class="form-group">
                     <label>Return Date</label>
                     <input type="date" id="date-return">
-                </div >
+                </div>
                 <button class="btn btn-add" onclick="addRecord()">Log Loan</button>
-            </div >
-        </div >
+            </div>
+        </div>
 
         <table>
             <thead>
@@ -349,7 +349,7 @@
             </thead>
             <tbody id="tracker-body"></tbody>
         </table>
-    </div >
+    </div>
 
     <div id="members" class="page">
         <div class="card-section">
@@ -358,16 +358,16 @@
                 <div class="form-group">
                     <label>Full Name</label>
                     <input type="text" id="new-member-name" placeholder="Enter member name">
-                </div >
+                </div>
                 <button class="btn btn-add" onclick="addNewMember()">Register Member</button>
-            </div >
-        </div >
+            </div>
+        </div>
         <div class="card-section">
             <h3>Member Directory</h3>
             <div id="member-list"></div>
-        </div >
-    </div >
-</div >
+        </div>
+    </div>
+</div>
 
 <div class="modal-overlay" id="return-modal">
     <div class="modal" onclick="event.stopPropagation()">
@@ -381,7 +381,7 @@
                 <option value="Worn">⚠️ Worn</option>
                 <option value="Damaged">❌ Damaged</option>
             </select>
-        </div}
+        </div>
         <div class="modal-btns">
             <button class="btn btn-danger" onclick="closeReturnModal()">Cancel</button>
             <button class="btn btn-add" onclick="confirmReturn()">Confirm Return</button>
@@ -397,7 +397,6 @@
     // --- CONFIGURATION ---
     const APP_PASSWORD = "phl2024"; 
     
-    // Your Correct Firebase Config
     const firebaseConfig = {
         apiKey: "AIzaSyBZUO8BLzx55tteVd73U5j1sxtbOEVYCrg",
         authDomain: "phl-book-club.firebaseapp.com",
@@ -407,9 +406,20 @@
         appId: "1:386886475632:web:51dd88a6665f1905a1b9b5"
     };
 
-    // Initialize Firebase (Compat Style)
+    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+
+    // ORIGINAL BOOKS LIST (To import if DB is empty)
+    const originalBooks = [
+        "Mind Shift - Antony T. Gitonga", "GRIT - Angela Duckworth", "Honorable Masculinity - Boniface Nyoike Ng’ang’a",
+        "Leading with Authenticity - Boniface Nyoike Ng’ang’a", "The Excellence Code - Boniface Nyoike Ng’ang’a",
+        "The one-minute Manager - Ken Blanchard", "Courageous Parenting - David Hutchins", "Make your Bed - William H. Mcraven",
+        "Right kind of Wrong - Amy Edmondson", "Marketing Medicine - Chris Harrison", "Extreme Ownership - Jocko Willink and Leif Babin",
+        "What wakes you up - Kariuki Kamau", "I’m too pretty to be Broke - Joan Thatiah", "The 7 Habits of Highly Effective People - Stephen Covey",
+        "Things fall Apart - Chinua Achebe", "The Psychology of Money - Morgan Housel", "The 12 Week Year - Brian P. Moran",
+        "Year of Yes - Shonda Rhimes", "How Women Rise - Marshall Goldsmith & Sally Helgesen", "Atomic Habits - James Clear", "Becoming - Michelle Obama"
+    ];
 
     // --- LOGIN LOGIC ---
     function checkPassword() {
@@ -441,10 +451,25 @@
         document.getElementById('loader').style.display = show ? 'block' : 'none';
     }
 
+    // Auto-import original books if DB is empty
+    async function checkAndImportOriginalBooks() {
+        const snapshot = await db.collection('books').get();
+        if (snapshot.empty) {
+            console.log("Database empty. Importing original book list...");
+            for (const title of originalBooks) {
+                await db.collection('books').add({ title, status: 'Available' });
+            }
+            console.log("Import complete.");
+        }
+    }
+
     // Fetch everything from Firebase
     async function fetchData() {
         showLoader(true);
         try {
+            // First, make sure books exist
+            await checkAndImportOriginalBooks();
+
             const booksSnap = await db.collection('books').get();
             books = booksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
@@ -596,8 +621,14 @@
         const book = books.find(b => b.title === record.book);
         if(book) await db.collection('books').doc(book.id).update({ status: 'Available' });
         
-        closeReturnModal();
+        closeLReturnModal();
         await fetchData();
+    }
+    
+    // Correcting a typo in a function name from previous block
+    function closeLReturnModal() {
+        document.getElementById('return-modal').style.display = 'none';
+        currentReturnIndex = null;
     }
 
     function renderTracker() {
