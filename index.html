@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PHL Book Club Manager</title>
+    <title>PHL Book Club Manager (Cloud Sync)</title>
     <style>
         :root {
             --primary: #1a252f;
@@ -23,7 +23,6 @@
             color: var(--primary);
         }
 
-        /* LOGIN OVERLAY STYLES */
         #login-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -94,7 +93,6 @@
         .page { display: none; }
         .page.active { display: block; }
 
-        /* Dashboard Styles */
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -128,7 +126,6 @@
         .stat-card.danger { border-color: var(--danger); }
         .stat-card.success { border-color: var(--success); }
 
-        /* Catalogue Styles */
         .card-section {
             background: white;
             padding: 20px;
@@ -174,7 +171,6 @@
             font-size: 0.8rem;
         }
 
-        /* Table Styles */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -187,7 +183,6 @@
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
         th { background-color: #f8f9fa; color: var(--primary); }
 
-        /* Forms */
         .form-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -218,7 +213,6 @@
             border-bottom: 1px solid #eee;
         }
 
-        /* MODAL STYLES */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -239,11 +233,17 @@
         .modal h3 { margin-top: 0; }
         .modal .form-group { margin-bottom: 20px; text-align: left; }
         .modal-btns { display: flex; gap: 10px; justify-content: center; }
+        
+        #loader {
+            position: fixed; top: 10px; right: 10px; background: var(--warning);
+            padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; display: none;
+        }
     </style>
 </head>
 <body onclick="closeModalOutside(event)">
 
-<!-- LOGIN OVERLAY -->
+<div id="loader">Syncing with Cloud...</div>
+
 <div id="login-overlay">
     <div class="login-box">
         <h2>🔐 PHL Login</h2>
@@ -268,7 +268,6 @@
 
 <div class="container">
     
-    <!-- DASHBOARD PAGE -->
     <div id="dashboard" class="page active">
         <div class="dashboard-grid">
             <div class="stat-card success">
@@ -294,7 +293,6 @@
         </div>
     </div>
 
-    <!-- CATALOGUE PAGE -->
     <div id="catalogue" class="page">
         <div class="card-section">
             <h3>➕ Add New Book</h3>
@@ -311,7 +309,6 @@
         <div class="catalogue-grid" id="catalogue-grid"></div>
     </div >
 
-    <!-- TRACKER PAGE -->
     <div id="tracker" class="page">
         <div class="card-section">
             <h3>📝 Log New Borrowing</h3>
@@ -354,7 +351,6 @@
         </table>
     </div >
 
-    <!-- MEMBERS PAGE -->
     <div id="members" class="page">
         <div class="card-section">
             <h3>👥 Add New Member</h3>
@@ -373,7 +369,6 @@
     </div >
 </div >
 
-<!-- RETURN CONDITION MODAL -->
 <div class="modal-overlay" id="return-modal">
     <div class="modal" onclick="event.stopPropagation()">
         <h3>Book Return</h3>
@@ -386,7 +381,7 @@
                 <option value="Worn">⚠️ Worn</option>
                 <option value="Damaged">❌ Damaged</option>
             </select>
-        </div>
+        </div}
         <div class="modal-btns">
             <button class="btn btn-danger" onclick="closeReturnModal()">Cancel</button>
             <button class="btn btn-add" onclick="confirmReturn()">Confirm Return</button>
@@ -394,60 +389,75 @@
     </div>
 </div>
 
+<!-- FIREBASE SDKS (COMPAT VERSION) -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
 <script>
     // --- CONFIGURATION ---
-    const APP_PASSWORD = "phl2024"; // <--- CHANGE YOUR PASSWORD HERE
+    const APP_PASSWORD = "phl2024"; 
+    
+    // Your Correct Firebase Config
+    const firebaseConfig = {
+        apiKey: "AIzaSyBZUO8BLzx55tteVd73U5j1sxtbOEVYCrg",
+        authDomain: "phl-book-club.firebaseapp.com",
+        projectId: "phl-book-club",
+        storageBucket: "phl-book-club.firebasestorage.app",
+        messagingSenderId: "386886475632",
+        appId: "1:386886475632:web:51dd88a6665f1905a1b9b5"
+    };
+
+    // Initialize Firebase (Compat Style)
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
     // --- LOGIN LOGIC ---
     function checkPassword() {
         const input = document.getElementById('login-password').value;
         const error = document.getElementById('login-error');
-        
         if(input === APP_PASSWORD) {
             document.getElementById('login-overlay').style.opacity = '0';
-            setTimeout(() => {
-                document.getElementById('login-overlay').style.display = 'none';
-            }, 500);
+            setTimeout(() => { document.getElementById('login-overlay').style.display = 'none'; }, 500);
             sessionStorage.setItem('phl_authenticated', 'true');
         } else {
             error.style.display = 'block';
         }
     }
 
-    function handleLoginKey(e) {
-        if(e.key === 'Enter') checkPassword();
-    }
+    function handleLoginKey(e) { if(e.key === 'Enter') checkPassword(); }
+    function logout() { sessionStorage.removeItem('phl_authenticated'); location.reload(); }
 
-    function logout() {
-        sessionStorage.removeItem('phl_authenticated');
-        location.reload();
-    }
-
-    // Check if already logged in for this session
     if(sessionStorage.getItem('phl_authenticated') === 'true') {
         document.getElementById('login-overlay').style.display = 'none';
     }
 
-    // --- DATA STRUCTURES ---
-    const initialBooks = [
-        "Mind Shift - Antony T. Gitonga", "GRIT - Angela Duckworth", "Honorable Masculinity - Boniface Nyoike Ng’ang’a",
-        "Leading with Authenticity - Boniface Nyoike Ng’ang’a", "The Excellence Code - Boniface Nyoike Ng’ang’a",
-        "The one-minute Manager - Ken Blanchard", "Courageous Parenting - David Hutchins", "Make your Bed - William H. Mcraven",
-        "Right kind of Wrong - Amy Edmondson", "Marketing Medicine - Chris Harrison", "Extreme Ownership - Jocko Willink and Leif Babin",
-        "What wakes you up - Kariuki Kamau", "I’m too pretty to be Broke - Joan Thatiah", "The 7 Habits of Highly Effective People - Stephen Covey",
-        "Things fall Apart - Chinua Achebe", "The Psychology of Money - Morgan Housel", "The 12 Week Year - Brian P. Moran",
-        "Year of Yes - Shonda Rhimes", "How Women Rise - Marshall Goldsmith & Sally Helgesen", "Atomic Habits - James Clear", "Becoming - Michelle Obama"
-    ].map(title => ({ title, status: 'Available' }));
-
-    let books = JSON.parse(localStorage.getItem('phl_books')) || initialBooks;
-    let members = JSON.parse(localStorage.getItem('phl_members')) || [];
-    let records = JSON.parse(localStorage.getItem('phl_records')) || [];
+    // --- CLOUD DATA STATE ---
+    let books = [];
+    let members = [];
+    let records = [];
     let currentReturnIndex = null;
 
-    function save() {
-        localStorage.setItem('phl_books', JSON.stringify(books));
-        localStorage.setItem('phl_members', JSON.stringify(members));
-        localStorage.setItem('phl_records', JSON.stringify(records));
+    async function showLoader(show) {
+        document.getElementById('loader').style.display = show ? 'block' : 'none';
+    }
+
+    // Fetch everything from Firebase
+    async function fetchData() {
+        showLoader(true);
+        try {
+            const booksSnap = await db.collection('books').get();
+            books = booksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const membersSnap = await db.collection('members').get();
+            members = membersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const recordsSnap = await db.collection('records').orderBy('timestamp', 'asc').get();
+            records = recordsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (e) {
+            console.error("Error fetching data: ", e);
+            alert("Error connecting to database. Please check your Firebase Rules.");
+        }
+        showLoader(false);
         renderAll();
     }
 
@@ -459,7 +469,6 @@
         if(pageId === 'dashboard') updateDashboard();
     }
 
-    // --- DASHBOARD LOGIC ---
     function updateDashboard() {
         const today = new Date().toISOString().split('T')[0];
         const activeLoans = records.filter(r => r.returned === 'NO').length;
@@ -471,31 +480,32 @@
         document.getElementById('stat-overdue').innerText = overdue;
     }
 
-    // --- BOOK MANAGEMENT ---
-    function addNewBook() {
+    async function addNewBook() {
         const title = document.getElementById('new-book-title').value;
         if(!title) return alert("Enter a title");
-        books.push({ title, status: 'Available' });
+        showLoader(true);
+        await db.collection('books').add({ title, status: 'Available' });
         document.getElementById('new-book-title').value = '';
-        save();
+        await fetchData();
     }
 
-    function changeBookStatus(index, newStatus) {
-        books[index].status = newStatus;
-        save();
+    async function changeBookStatus(id, newStatus) {
+        showLoader(true);
+        await db.collection('books').doc(id).update({ status: newStatus });
+        await fetchData();
     }
 
     function renderCatalogue() {
         const grid = document.getElementById('catalogue-grid');
         grid.innerHTML = '';
-        books.forEach((book, i) => {
+        books.forEach((book) => {
             const statusClass = 'status-' + book.status.toLowerCase().replace(' ', '-');
             grid.innerHTML += `
                 <div class="book-card ${statusClass}">
                     <h3>${book.title}</h3>
                     <div class="status-control">
                         <span style="font-weight:bold">Status:</span>
-                        <select onchange="changeBookStatus(${i}, this.value)">
+                        <select onchange="changeBookStatus('${book.id}', this.value)">
                             <option ${book.status === 'Available' ? 'selected' : ''}>Available</option>
                             <option ${book.status === 'Borrowed' ? 'selected' : ''}>Borrowed</option>
                             <option ${book.status === 'Lost' ? 'selected' : ''}>Lost</option>
@@ -506,32 +516,37 @@
         });
     }
 
-    // --- MEMBER MANAGEMENT ---
-    function addNewMember() {
+    async function addNewMember() {
         const name = document.getElementById('new-member-name').value.trim();
         if(!name) return alert("Enter name");
-        if(!members.includes(name)) {
-            members.push(name);
+        
+        const exists = members.some(m => m.name === name);
+        if(!exists) {
+            showLoader(true);
+            await db.collection('members').add({ name });
             document.getElementById('new-member-name').value = '';
-            save();
+            await fetchData();
         } else {
             alert("Member already exists!");
         }
     }
 
-    function removeMember(i) {
-        if(confirm("Delete this member?")) { members.splice(i, 1); save(); }
+    async function removeMember(id) {
+        if(confirm("Delete this member?")) { 
+            showLoader(true);
+            await db.collection('members').doc(id).delete(); 
+            await fetchData(); 
+        }
     }
 
     function renderMembers() {
-        document.getElementById('member-list').innerHTML = members.map((m, i) => `
+        document.getElementById('member-list').innerHTML = members.map((m) => `
             <div class="member-item">
-                ${m} <button class="btn btn-danger" style="padding:2px 8px" onclick="removeMember(${i})">Delete</button>
+                ${m.name} <button class="btn btn-danger" style="padding:2px 8px" onclick="removeMember('${m.id}')">Delete</button>
             </div>`).join('');
     }
 
-    // --- TRACKING & MODAL LOGIC ---
-    function addRecord() {
+    async function addRecord() {
         const borrower = document.getElementById('borrower-input').value.trim();
         const bookTitle = document.getElementById('book-select').value;
         const taken = document.getElementById('date-taken').value;
@@ -539,17 +554,22 @@
 
         if(!borrower || !bookTitle || !taken) return alert("Fill in required fields");
 
-        if (!members.includes(borrower)) {
-            members.push(borrower);
+        showLoader(true);
+
+        if (!members.some(m => m.name === borrower)) {
+            await db.collection('members').add({ name: borrower });
         }
 
-        records.push({ borrower, book: bookTitle, taken, returnDate, condition: '-', returned: 'NO' });
+        await db.collection('records').add({ 
+            borrower, book: bookTitle, taken, returnDate, 
+            condition: '-', returned: 'NO', timestamp: firebase.firestore.FieldValue.serverTimestamp() 
+        });
         
-        const bookIdx = books.findIndex(b => b.title === bookTitle);
-        if(bookIdx !== -1) books[bookIdx].status = 'Borrowed';
+        const book = books.find(b => b.title === bookTitle);
+        if(book) await db.collection('books').doc(book.id).update({ status: 'Borrowed' });
         
         document.getElementById('borrower-input').value = '';
-        save();
+        await fetchData();
     }
 
     function openReturnModal(index) {
@@ -564,20 +584,20 @@
         currentReturnIndex = null;
     }
 
-    function closeModalOutside(e) {
-        if(e.target.id === 'return-modal') closeReturnModal();
-    }
+    function closeModalOutside(e) { if(e.target.id === 'return-modal') closeReturnModal(); }
 
-    function confirmReturn() {
+    async function confirmReturn() {
         const condition = document.getElementById('modal-condition-select').value;
-        records[currentReturnIndex].returned = 'YES';
-        records[currentReturnIndex].condition = condition;
+        const record = records[currentReturnIndex];
         
-        const bookIdx = books.findIndex(b => b.title === records[currentReturnIndex].book);
-        if(bookIdx !== -1) books[bookIdx].status = 'Available';
+        showLoader(true);
+        await db.collection('records').doc(record.id).update({ returned: 'YES', condition: condition });
+        
+        const book = books.find(b => b.title === record.book);
+        if(book) await db.collection('books').doc(book.id).update({ status: 'Available' });
         
         closeReturnModal();
-        save();
+        await fetchData();
     }
 
     function renderTracker() {
@@ -603,7 +623,7 @@
     function updateDropdowns() {
         document.getElementById('book-select').innerHTML = books.map(b => `<option value="${b.title}">${b.title}</option>`).join('');
         const suggestions = document.getElementById('member-suggestions');
-        suggestions.innerHTML = members.map(m => `<option value="${m}">`).join('');
+        suggestions.innerHTML = members.map(m => `<option value="${m.name}">`).join('');
     }
 
     function renderAll() {
@@ -614,7 +634,8 @@
         updateDropdowns();
     }
 
-    renderAll();
+    // Start the app
+    fetchData();
 </script>
 </body>
 </html>
