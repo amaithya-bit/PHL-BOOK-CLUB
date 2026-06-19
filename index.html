@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PHL Book Club Manager (Cloud Sync)</title>
+    <!-- EmailJS Library -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <!-- Chart.js for Interactive Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --primary: #1a252f;
@@ -93,6 +97,7 @@
         .page { display: none; }
         .page.active { display: block; }
 
+        /* Interactive Dashboard Styles */
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -107,6 +112,14 @@
             text-align: center;
             box-shadow: var(--shadow);
             border-bottom: 5px solid var(--secondary);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+            background: #fdfdfd;
         }
 
         .stat-card h3 {
@@ -125,6 +138,39 @@
 
         .stat-card.danger { border-color: var(--danger); }
         .stat-card.success { border-color: var(--success); }
+
+        .dashboard-main {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .quick-actions {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .action-btn {
+            width: 100%;
+            text-align: left;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
         .card-section {
             background: white;
@@ -204,6 +250,7 @@
         .btn-add { background: var(--success); color: white; }
         .btn-return { background: var(--secondary); color: white; padding: 5px 10px; }
         .btn-danger { background: var(--danger); color: white; }
+        .btn-email { background: #8e44ad; color: white; padding: 5px 10px; font-size: 0.7rem; }
 
         .member-item {
             display: flex;
@@ -238,6 +285,10 @@
             position: fixed; top: 10px; right: 10px; background: var(--warning);
             padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; display: none;
         }
+
+        @media (max-width: 768px) {
+            .dashboard-main { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body onclick="closeModalOutside(event)">
@@ -270,25 +321,40 @@
     
     <div id="dashboard" class="page active">
         <div class="dashboard-grid">
-            <div class="stat-card success">
+            <div class="stat-card success" onclick="showPage('catalogue')">
                 <h3>Total Books</h3>
                 <span class="number" id="stat-total-books">0</span>
-                <span>In Collection</span>
+                <small>View Catalogue →</small>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="jumpToTracker('active')">
                 <h3>Active Loans</h3>
                 <span class="number" id="stat-active-loans">0</span>
-                <span>Currently Out</span>
+                <small>View Loans →</small>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="showPage('members')">
                 <h3>Club Members</h3>
                 <span class="number" id="stat-members">0</span>
-                <span>Registered</span>
+                <small>View Directory →</small>
             </div>
-            <div class="stat-card danger">
+            <div class="stat-card danger" onclick="jumpToTracker('overdue')">
                 <h3>Overdue Books</h3>
                 <span class="number" id="stat-overdue">0</span>
-                <span>Needs Return</span>
+                <small>Send Reminders →</small>
+            </div>
+        </div>
+
+        <div class="dashboard-main">
+            <div class="chart-container">
+                <h3 style="margin-bottom:20px">Library Status Distribution</h3>
+                <div style="width: 300px; height: 300px;">
+                    <canvas id="libraryChart"></canvas>
+                </div>
+            </div>
+            <div class="quick-actions">
+                <h3 style="margin-top:0">⚡ Quick Actions</h3>
+                <button class="btn btn-add action-btn" onclick="showPage('catalogue')">📖 Add New Book</button>
+                <button class="btn btn-add action-btn" onclick="showPage('tracker')">📝 Log a Borrowing</button>
+                <button class="btn btn-add action-btn" onclick="showPage('members')">👥 Register Member</button>
             </div>
         </div>
     </div>
@@ -314,9 +380,13 @@
             <h3>📝 Log New Borrowing</h3>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Borrower Name (Type or Select)</label>
-                    <input type="text" id="borrower-input" list="member-suggestions" placeholder="Start typing name...">
+                    <label>Borrower Name</label>
+                    <input type="text" id="borrower-input" list="member-suggestions" placeholder="Name...">
                     <datalist id="member-suggestions"></datalist>
+                </div>
+                <div class="form-group">
+                    <label>Borrower Email</label>
+                    <input type="email" id="borrower-email" placeholder="email@example.com">
                 </div>
                 <div class="form-group">
                     <label>Book</label>
@@ -334,15 +404,15 @@
             </div>
         </div>
 
-        <table>
+        <table id="tracker-table">
             <thead>
-                <tr>
+                <tr id="tracker-header">
                     <th>No.</th>
                     <th>Borrower</th>
                     <th>Book</th>
                     <th>Taken</th>
                     <th>Expected</th>
-                    <th>Condition (Return)</th>
+                    <th>Condition</th>
                     <th>Returned?</th>
                     <th>Action</th>
                 </tr>
@@ -389,7 +459,6 @@
     </div>
 </div>
 
-<!-- FIREBASE SDKS (COMPAT VERSION) -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
@@ -397,6 +466,10 @@
     // --- CONFIGURATION ---
     const APP_PASSWORD = "phl2024"; 
     
+    const EMAILJS_PUBLIC_KEY = "t4BRdh22mZVYoRkbd";
+    const EMAILJS_SERVICE_ID = "service_uzf8j6d";
+    const EMAILJS_TEMPLATE_ID = "template_8bar3cj";
+
     const firebaseConfig = {
         apiKey: "AIzaSyBZUO8BLzx55tteVd73U5j1sxtbOEVYCrg",
         authDomain: "phl-book-club.firebaseapp.com",
@@ -406,22 +479,11 @@
         appId: "1:386886475632:web:51dd88a6665f1905a1b9b5"
     };
 
-    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    emailjs.init(EMAILJS_PUBLIC_KEY);
 
-    // ORIGINAL BOOKS LIST (To import if DB is empty)
-    const originalBooks = [
-        "Mind Shift - Antony T. Gitonga", "GRIT - Angela Duckworth", "Honorable Masculinity - Boniface Nyoike Ng’ang’a",
-        "Leading with Authenticity - Boniface Nyoike Ng’ang’a", "The Excellence Code - Boniface Nyoike Ng’ang’a",
-        "The one-minute Manager - Ken Blanchard", "Courageous Parenting - David Hutchins", "Make your Bed - William H. Mcraven",
-        "Right kind of Wrong - Amy Edmondson", "Marketing Medicine - Chris Harrison", "Extreme Ownership - Jocko Willink and Leif Babin",
-        "What wakes you up - Kariuki Kamau", "I’m too pretty to be Broke - Joan Thatiah", "The 7 Habits of Highly Effective People - Stephen Covey",
-        "Things fall Apart - Chinua Achebe", "The Psychology of Money - Morgan Housel", "The 12 Week Year - Brian P. Moran",
-        "Year of Yes - Shonda Rhimes", "How Women Rise - Marshall Goldsmith & Sally Helgesen", "Atomic Habits - James Clear", "Becoming - Michelle Obama"
-    ];
-
-    // --- LOGIN LOGIC ---
+    // --- LOGIN ---
     function checkPassword() {
         const input = document.getElementById('login-password').value;
         const error = document.getElementById('login-error');
@@ -433,54 +495,33 @@
             error.style.display = 'block';
         }
     }
-
     function handleLoginKey(e) { if(e.key === 'Enter') checkPassword(); }
     function logout() { sessionStorage.removeItem('phl_authenticated'); location.reload(); }
-
     if(sessionStorage.getItem('phl_authenticated') === 'true') {
         document.getElementById('login-overlay').style.display = 'none';
     }
 
-    // --- CLOUD DATA STATE ---
     let books = [];
     let members = [];
     let records = [];
     let currentReturnIndex = null;
+    let libraryChart = null;
 
     async function showLoader(show) {
         document.getElementById('loader').style.display = show ? 'block' : 'none';
     }
 
-    // Auto-import original books if DB is empty
-    async function checkAndImportOriginalBooks() {
-        const snapshot = await db.collection('books').get();
-        if (snapshot.empty) {
-            console.log("Database empty. Importing original book list...");
-            for (const title of originalBooks) {
-                await db.collection('books').add({ title, status: 'Available' });
-            }
-            console.log("Import complete.");
-        }
-    }
-
-    // Fetch everything from Firebase
     async function fetchData() {
         showLoader(true);
         try {
-            // First, make sure books exist
-            await checkAndImportOriginalBooks();
-
             const booksSnap = await db.collection('books').get();
             books = booksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
             const membersSnap = await db.collection('members').get();
             members = membersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
             const recordsSnap = await db.collection('records').orderBy('timestamp', 'asc').get();
             records = recordsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         } catch (e) {
-            console.error("Error fetching data: ", e);
-            alert("Error connecting to database. Please check your Firebase Rules.");
+            console.error(e);
         }
         showLoader(false);
         renderAll();
@@ -491,18 +532,65 @@
         document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
         document.getElementById('btn-' + pageId).classList.add('active');
-        if(pageId === 'dashboard') updateDashboard();
+        if(pageId === 'dashboard') {
+            updateDashboard();
+            updateChart();
+        }
+    }
+
+    function jumpToTracker(filter) {
+        showPage('tracker');
+        setTimeout(() => {
+            const rows = document.querySelectorAll('#tracker-body tr');
+            rows.forEach((row, i) => {
+                const record = records[i];
+                const today = new Date().toISOString().split('T')[0];
+                if (filter === 'overdue' && record.returned === 'NO' && record.returnDate < today) {
+                    row.style.outline = "3px solid red";
+                    row.scrollIntoView({ behavior: 'smooth' });
+                } else if (filter === 'active' && record.returned === 'NO') {
+                    row.style.outline = "3px solid var(--secondary)";
+                    row.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        }, 200);
     }
 
     function updateDashboard() {
         const today = new Date().toISOString().split('T')[0];
         const activeLoans = records.filter(r => r.returned === 'NO').length;
         const overdue = records.filter(r => r.returned === 'NO' && r.returnDate < today).length;
-
         document.getElementById('stat-total-books').innerText = books.length;
         document.getElementById('stat-active-loans').innerText = activeLoans;
         document.getElementById('stat-members').innerText = members.length;
         document.getElementById('stat-overdue').innerText = overdue;
+    }
+
+    function updateChart() {
+        const available = books.filter(b => b.status === 'Available').length;
+        const borrowed = books.filter(b => b.status === 'Borrowed').length;
+        const other = books.filter(b => b.status === 'Lost' || b.status === 'Repair').length;
+
+        const ctx = document.getElementById('libraryChart').getContext('2d');
+        
+        if (libraryChart) libraryChart.destroy();
+
+        libraryChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Available', 'Borrowed', 'Other'],
+                datasets: [{
+                    data: [available, borrowed, other],
+                    backgroundColor: ['#27ae60', '#e74c3c', '#f39c12'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
     }
 
     async function addNewBook() {
@@ -544,15 +632,11 @@
     async function addNewMember() {
         const name = document.getElementById('new-member-name').value.trim();
         if(!name) return alert("Enter name");
-        
-        const exists = members.some(m => m.name === name);
-        if(!exists) {
+        if(!members.some(m => m.name === name)) {
             showLoader(true);
             await db.collection('members').add({ name });
             document.getElementById('new-member-name').value = '';
             await fetchData();
-        } else {
-            alert("Member already exists!");
         }
     }
 
@@ -573,6 +657,7 @@
 
     async function addRecord() {
         const borrower = document.getElementById('borrower-input').value.trim();
+        const email = document.getElementById('borrower-email').value.trim();
         const bookTitle = document.getElementById('book-select').value;
         const taken = document.getElementById('date-taken').value;
         const returnDate = document.getElementById('date-return').value;
@@ -580,13 +665,12 @@
         if(!borrower || !bookTitle || !taken) return alert("Fill in required fields");
 
         showLoader(true);
-
         if (!members.some(m => m.name === borrower)) {
             await db.collection('members').add({ name: borrower });
         }
 
         await db.collection('records').add({ 
-            borrower, book: bookTitle, taken, returnDate, 
+            borrower, email, book: bookTitle, taken, returnDate, 
             condition: '-', returned: 'NO', timestamp: firebase.firestore.FieldValue.serverTimestamp() 
         });
         
@@ -594,7 +678,29 @@
         if(book) await db.collection('books').doc(book.id).update({ status: 'Borrowed' });
         
         document.getElementById('borrower-input').value = '';
+        document.getElementById('borrower-email').value = '';
         await fetchData();
+    }
+
+    async function sendEmailReminder(index) {
+        const record = records[index];
+        if(!record.email) return alert("This borrower has no email address registered.");
+
+        showLoader(true);
+        const params = {
+            borrower_name: record.borrower,
+            book_title: record.book,
+            to_email: record.email
+        };
+
+        emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, params, record.email)
+            .then(() => {
+                alert("Reminder email sent successfully!");
+                showLoader(false);
+            }, (err) => {
+                alert("Failed to send email. Check your EmailJS keys.");
+                showLoader(false);
+            });
     }
 
     function openReturnModal(index) {
@@ -609,23 +715,19 @@
         currentReturnIndex = null;
     }
 
-    function closeModalOutside(e) { if(e.target.id === 'return-modal') closeReturnModal(); }
+    function closeModalOutside(e) { if(e.target.id === 'return-modal') closeLReturnModal(); }
 
     async function confirmReturn() {
         const condition = document.getElementById('modal-condition-select').value;
         const record = records[currentReturnIndex];
-        
         showLoader(true);
         await db.collection('records').doc(record.id).update({ returned: 'YES', condition: condition });
-        
         const book = books.find(b => b.title === record.book);
         if(book) await db.collection('books').doc(book.id).update({ status: 'Available' });
-        
         closeLReturnModal();
         await fetchData();
     }
     
-    // Correcting a typo in a function name from previous block
     function closeLReturnModal() {
         document.getElementById('return-modal').style.display = 'none';
         currentReturnIndex = null;
@@ -635,17 +737,23 @@
         const body = document.getElementById('tracker-body');
         body.innerHTML = '';
         records.forEach((r, i) => {
+            const today = new Date().toISOString().split('T')[0];
+            const isOverdue = (r.returned === 'NO' && r.returnDate < today);
+            
             body.innerHTML += `
                 <tr style="${r.returned === 'NO' ? 'background-color: #fffcf0' : ''}">
                     <td>${i + 1}</td>
                     <td style="font-weight:bold">${r.borrower}</td>
                     <td>${r.book}</td>
                     <td>${r.taken}</td>
-                    <td>${r.returnDate}</td>
+                    <td style="${isOverdue ? 'color:red; font-weight:bold' : ''}">${r.returnDate}</td>
                     <td>${r.condition}</td>
                     <td><strong style="color:${r.returned === 'YES' ? 'green' : 'red'}">${r.returned}</strong></td>
                     <td>
-                        ${r.returned === 'NO' ? `<button class="btn btn-return" onclick="openReturnModal(${i})">Return</button>` : '✅'}
+                        ${r.returned === 'NO' ? `
+                            <button class="btn btn-return" onclick="openReturnModal(${i})">Return</button>
+                            ${isOverdue ? `<button class="btn btn-email" onclick="sendEmailReminder(${i})">📧 Remind</button>` : ''}
+                        ` : '✅'}
                     </td>
                 </tr>`;
         });
@@ -663,9 +771,9 @@
         renderTracker();
         renderMembers();
         updateDropdowns();
+        updateChart();
     }
 
-    // Start the app
     fetchData();
 </script>
 </body>
